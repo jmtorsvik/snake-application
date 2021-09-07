@@ -4,9 +4,58 @@
 
 <script>
 export default {
-  name: "App",
+  name: "Canvas",
+  props: {
+    userName: String,
+    maxHighScores: Number,
+  },
+  methods: {
+    async addScore(score) {
+      const res = await fetch("http://10.0.0.8:8081/scores");
+
+      const data = await res.json();
+
+      const userObject = data.filter((user) => user.name === this.userName)[0];
+
+      if (userObject) {
+        const scores = userObject.scores;
+        
+        for (let i = 0; i < scores.length; i++) {
+          if (score > scores[i]) {
+            scores.splice(i, 0, score);
+            scores.pop();
+            break;
+          }
+        }
+
+        fetch(`http://10.0.0.8:8081/scores/${this.userName}`, {
+          method: "PUT",
+          headers: {
+            "Content-type": "application/json",
+          },
+          body: JSON.stringify({
+            scores: scores,
+          }),
+        });
+
+      } else {
+        fetch(`http://10.0.0.8:8081/scores/${this.userName}`, {
+          method: "POST",
+          headers: {
+            "Content-type": "application/json",
+          },
+          body: JSON.stringify({
+            scores: [score, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          }),
+        });
+      }
+    },
+  },
   mounted() {
+    console.log(this.userName + " is now playing.");
+
     const script = (p5) => {
+      const canvas = this;
       const canvasSize = 500;
       const side = 40;
       const vel = 4;
@@ -49,8 +98,7 @@ export default {
         }
       }
 
-      function loseGame() {
-        gameLost = true;
+      function gameLostScreen() {
         p5.background(0, 25, 50);
         let s = p5.height / 10;
         p5.textSize(s);
@@ -66,8 +114,16 @@ export default {
         p5.text("Score: " + p5.int(score), p5.width / 2, p5.height / 1.5);
         p5.fill(0, 255, 0);
         p5.textSize(s / 2);
-        p5.text("Press R to try again", p5.width / 2, p5.height / 1.3);
-        p5.text("Use WASD to move", p5.width / 2, p5.height / 4);
+        p5.text("Press 'R' to Try Again", p5.width / 2, p5.height / 1.25);
+        p5.text("Press 'M' to go to Menu", p5.width / 2, p5.height / 1.15);
+        p5.text("Use 'WASD' to move", p5.width / 2, p5.height / 4.5);
+      }
+
+      function loseGame() {
+        gameLost = true;
+
+        // Add new score
+        canvas.addScore(score);
       }
 
       function reset() {
@@ -113,8 +169,10 @@ export default {
           snake[0].movingRight = false;
           snake[0].movingUp = false;
           snake[0].movingDown = true;
-        } else if (p5.keyCode === 82 && gameLost == true) {
+        } else if (p5.keyCode === 82 && gameLost) {
           reset();
+        } else if (p5.keyCode === 77 && gameLost) {
+          canvas.$emit("stop-game");
         }
       };
 
@@ -128,112 +186,111 @@ export default {
           dx -= snake[i].offset;
         }
 
-        console.log(food);
-
         food.tp();
-
-        console.log(food);
 
         snake[0].movingRight = true;
       };
 
       // DRAW
       p5.draw = () => {
-        if (selfCollide()) {
-          loseGame();
-        } else if (
-          snake[0].x < snake[0].s / 2 ||
-          snake[0].x > p5.width - snake[0].s / 2 ||
-          snake[0].y < snake[0].s / 2 ||
-          snake[0].y > p5.height - snake[0].s / 2
-        ) {
-          loseGame();
+        if (gameLost) {
+          gameLostScreen();
         } else {
-          p5.background(0, 25, 50);
+          if (
+            selfCollide() ||
+            snake[0].x < snake[0].s / 2 ||
+            snake[0].x > p5.width - snake[0].s / 2 ||
+            snake[0].y < snake[0].s / 2 ||
+            snake[0].y > p5.height - snake[0].s / 2
+          ) {
+            loseGame();
+          } else {
+            p5.background(0, 25, 50);
 
-          if (snake[0].onFood()) {
-            if (snake[snake.length - 1].movingLeft) {
-              snake.push(
-                new Cube(
-                  snake[snake.length - 1].x + snake[snake.length - 1].offset,
-                  snake[snake.length - 1].y
-                )
-              );
-            } else if (snake[snake.length - 1].movingRight) {
-              snake.push(
-                new Cube(
-                  snake[snake.length - 1].x - snake[snake.length - 1].offset,
-                  snake[snake.length - 1].y
-                )
-              );
-            } else if (snake[snake.length - 1].movingUp) {
-              snake.push(
-                new Cube(
-                  snake[snake.length - 1].x,
-                  snake[snake.length - 1].y + snake[snake.length - 1].offset
-                )
-              );
-            } else if (snake[snake.length - 1].movingDown) {
-              snake.push(
-                new Cube(
-                  snake[snake.length - 1].x,
-                  snake[snake.length - 1].y - snake[snake.length - 1].offset
-                )
-              );
+            if (snake[0].onFood()) {
+              if (snake[snake.length - 1].movingLeft) {
+                snake.push(
+                  new Cube(
+                    snake[snake.length - 1].x + snake[snake.length - 1].offset,
+                    snake[snake.length - 1].y
+                  )
+                );
+              } else if (snake[snake.length - 1].movingRight) {
+                snake.push(
+                  new Cube(
+                    snake[snake.length - 1].x - snake[snake.length - 1].offset,
+                    snake[snake.length - 1].y
+                  )
+                );
+              } else if (snake[snake.length - 1].movingUp) {
+                snake.push(
+                  new Cube(
+                    snake[snake.length - 1].x,
+                    snake[snake.length - 1].y + snake[snake.length - 1].offset
+                  )
+                );
+              } else if (snake[snake.length - 1].movingDown) {
+                snake.push(
+                  new Cube(
+                    snake[snake.length - 1].x,
+                    snake[snake.length - 1].y - snake[snake.length - 1].offset
+                  )
+                );
+              }
+              food.tp();
             }
-            food.tp();
-          }
 
-          for (let cube of snake) {
             for (let cube of snake) {
-              if (cube.onFood()) {
-                food.tp();
+              for (let cube of snake) {
+                if (cube.onFood()) {
+                  food.tp();
+                }
+              }
+              cube.show();
+            }
+
+            food.show();
+
+            if (snake[0].movingLeft) {
+              snake[0].moveLeft();
+            } else if (snake[0].movingRight) {
+              snake[0].moveRight();
+            } else if (snake[0].movingUp) {
+              snake[0].moveUp();
+            } else if (snake[0].movingDown) {
+              snake[0].moveDown();
+            }
+
+            for (let i = 1; i < snake.length; i++) {
+              if (
+                (snake[i - 1].movingLeft && snake[i - 1].y == snake[i].y) ||
+                (snake[i - 1].movingUp && snake[i - 1].x < snake[i].x) ||
+                (snake[i - 1].movingDown && snake[i - 1].x < snake[i].x)
+              ) {
+                snake[i].moveLeft();
+              } else if (
+                (snake[i - 1].movingRight && snake[i - 1].y == snake[i].y) ||
+                (snake[i - 1].movingUp && snake[i - 1].x > snake[i].x) ||
+                (snake[i - 1].movingDown && snake[i - 1].x > snake[i].x)
+              ) {
+                snake[i].moveRight();
+              } else if (
+                (snake[i - 1].movingUp && snake[i - 1].x == snake[i].x) ||
+                (snake[i - 1].movingLeft && snake[i - 1].y < snake[i].y) ||
+                (snake[i - 1].movingRight && snake[i - 1].y < snake[i].y)
+              ) {
+                snake[i].moveUp();
+              } else if (
+                (snake[i - 1].movingDown && snake[i - 1].x == snake[i].x) ||
+                (snake[i - 1].movingLeft && snake[i - 1].y > snake[i].y) ||
+                (snake[i - 1].movingRight && snake[i - 1].y > snake[i].y)
+              ) {
+                snake[i].moveDown();
               }
             }
-            cube.show();
+            score = snake.length * 1000;
+            showScore();
           }
-
-          food.show();
-
-          if (snake[0].movingLeft) {
-            snake[0].moveLeft();
-          } else if (snake[0].movingRight) {
-            snake[0].moveRight();
-          } else if (snake[0].movingUp) {
-            snake[0].moveUp();
-          } else if (snake[0].movingDown) {
-            snake[0].moveDown();
-          }
-
-          for (let i = 1; i < snake.length; i++) {
-            if (
-              (snake[i - 1].movingLeft && snake[i - 1].y == snake[i].y) ||
-              (snake[i - 1].movingUp && snake[i - 1].x < snake[i].x) ||
-              (snake[i - 1].movingDown && snake[i - 1].x < snake[i].x)
-            ) {
-              snake[i].moveLeft();
-            } else if (
-              (snake[i - 1].movingRight && snake[i - 1].y == snake[i].y) ||
-              (snake[i - 1].movingUp && snake[i - 1].x > snake[i].x) ||
-              (snake[i - 1].movingDown && snake[i - 1].x > snake[i].x)
-            ) {
-              snake[i].moveRight();
-            } else if (
-              (snake[i - 1].movingUp && snake[i - 1].x == snake[i].x) ||
-              (snake[i - 1].movingLeft && snake[i - 1].y < snake[i].y) ||
-              (snake[i - 1].movingRight && snake[i - 1].y < snake[i].y)
-            ) {
-              snake[i].moveUp();
-            } else if (
-              (snake[i - 1].movingDown && snake[i - 1].x == snake[i].x) ||
-              (snake[i - 1].movingLeft && snake[i - 1].y > snake[i].y) ||
-              (snake[i - 1].movingRight && snake[i - 1].y > snake[i].y)
-            ) {
-              snake[i].moveDown();
-            }
-          }
-          score = snake.length * 1000;
-          showScore();
         }
       };
 
